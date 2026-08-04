@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Generador Hoja de Transferencia</title>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<style>
+body{font-family:Arial,sans-serif;background:#f4f4f4;margin:0}
+.wrap{max-width:1000px;margin:30px auto;background:#fff;padding:25px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,.15)}
+h2{text-align:center}
+.row{display:flex;gap:20px;align-items:center;margin:15px 0}
+select,button{padding:10px;font-size:16px}
+textarea{width:100%;height:300px;font-family:Consolas,monospace}
+button{background:#0b7d3b;color:#fff;border:0;border-radius:6px;cursor:pointer}
+#estado{margin-top:10px;font-weight:bold}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h2>GENERADOR HOJA DE TRANSFERENCIA SSA</h2>
+
+<div class="row">
+<label><b>Tipo:</b></label>
+<select id="tipo">
+<option value="furgon">FURGÓN (22 registros)</option>
+<option value="madrina">MADRINA (10 registros)</option>
+</select>
+</div>
+
+<textarea id="data" placeholder="VIN[TAB]PUERTO[TAB]DESTINO[TAB]TRANSPORTE"></textarea>
+
+<br><br>
+<button onclick="generarPDF()">Generar PDF</button>
+<div id="estado"></div>
+</div>
+
+<script>
+const CONFIG={
+furgon:{
+ plantilla:"CARATULA FURGON.png",
+ registros:22,
+ filasY:Array.from({length:22},(_,i)=>722+i*61.5),
+ xVin:210,xPuerto:990,xDestino:1300,
+ xTrans:2950,yTrans:255
+},
+madrina:{
+ plantilla:"CARATULA MADRINA.png",
+ registros:10,
+ filasY:[880,960,1035,1110,1185,1260,1335,1410,1485,1560],
+ xVin:210,xPuerto:900,xDestino:1180,
+ xTrans:2900,yTrans:300
+}
+};
+
+async function generarPDF(){
+
+const estado=document.getElementById("estado");
+estado.textContent="Generando PDF...";
+
+const tipo=document.getElementById("tipo").value;
+const cfg=CONFIG[tipo];
+
+const texto=document.getElementById("data").value.trim();
+
+if(!texto){
+ alert("Pegue el layout.");
+ estado.textContent="";
+ return;
+}
+
+const r=await fetch(cfg.plantilla);
+const blob=await r.blob();
+
+const imgData=await new Promise(res=>{
+ const fr=new FileReader();
+ fr.onload=e=>res(e.target.result);
+ fr.readAsDataURL(blob);
+});
+
+const {jsPDF}=window.jspdf;
+const pdf=new jsPDF("landscape","px",[3300,2550]);
+
+let datos=[];
+
+texto.split(/\r?\n/).forEach(l=>{
+ let p=l.split(/\t|,/);
+ if(p.length>=4){
+   datos.push({
+     vin:p[0].trim(),
+     puerto:p[1].trim(),
+     destino:p[2].trim(),
+     transporte:p[3].trim()
+   });
+ }
+});
+
+let grupos={};
+datos.forEach(d=>{
+ if(!grupos[d.transporte]) grupos[d.transporte]=[];
+ grupos[d.transporte].push(d);
+});
+
+let primera=true;
+
+for(let t in grupos){
+
+ let lista=grupos[t];
+
+ for(let i=0;i<lista.length;i+=cfg.registros){
+
+   if(!primera) pdf.addPage();
+   primera=false;
+
+   pdf.addImage(imgData,"PNG",0,-10,3350,2550);
+
+   let bloque=lista.slice(i,i+cfg.registros);
+
+   bloque.forEach((item,idx)=>{
+
+      let y=cfg.filasY[idx];
+
+      pdf.setFont("helvetica","bold");
+
+      pdf.setFontSize(44);
+      pdf.text(item.vin,cfg.xVin,y);
+
+      pdf.setFontSize(40);
+      pdf.text(item.puerto,cfg.xPuerto,y);
+
+      pdf.text(item.destino,cfg.xDestino,y);
+
+   });
+
+   pdf.setFontSize(60);
+   pdf.text(t,cfg.xTrans,cfg.yTrans);
+
+ }
+
+}
+
+pdf.save("HOJAS DE_TRANSFERENCIA.pdf");
+estado.textContent="PDF generado correctamente.";
+}
+</script>
+
+</body>
+</html>
