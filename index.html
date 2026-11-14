@@ -403,16 +403,38 @@ if(!texto){
 }
 
 const r=await fetch(cfg.plantilla);
+if(!r.ok) throw new Error("No se pudo cargar la plantilla: "+cfg.plantilla);
 const blob=await r.blob();
 
-const imgData=await new Promise(res=>{
- const fr=new FileReader();
- fr.onload=e=>res(e.target.result);
- fr.readAsDataURL(blob);
+// Normaliza la plantilla a la resolución real de salida y la comprime.
+// Evita incrustar PNG enormes (o escaneos de resolución excesiva) en el PDF.
+const imgData=await new Promise((resolve,reject)=>{
+ const url=URL.createObjectURL(blob);
+ const img=new Image();
+ img.onload=()=>{
+   try{
+     const canvas=document.createElement("canvas");
+     canvas.width=3350;
+     canvas.height=2550;
+     const ctx=canvas.getContext("2d",{alpha:false});
+     ctx.fillStyle="#ffffff";
+     ctx.fillRect(0,0,canvas.width,canvas.height);
+     ctx.drawImage(img,0,0,canvas.width,canvas.height);
+     resolve(canvas.toDataURL("image/jpeg",0.94));
+   }catch(err){reject(err)}
+   finally{URL.revokeObjectURL(url)}
+ };
+ img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error("No se pudo procesar la plantilla."))};
+ img.src=url;
 });
 
 const {jsPDF}=window.jspdf;
-const pdf=new jsPDF("landscape","px",[3300,2550]);
+const pdf=new jsPDF({
+ orientation:"landscape",
+ unit:"px",
+ format:[3300,2550],
+ compress:true
+});
 
 let datos=[];
 
@@ -445,7 +467,7 @@ for(let t in grupos){
    if(!primera) pdf.addPage();
    primera=false;
 
-   pdf.addImage(imgData,"PNG",0,-10,3350,2550);
+   pdf.addImage(imgData,"JPEG",0,-10,3350,2550,undefined,"FAST");
 
    let bloque=lista.slice(i,i+cfg.registros);
 
